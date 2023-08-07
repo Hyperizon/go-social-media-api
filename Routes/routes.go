@@ -22,4 +22,6 @@ func Setup(app *fiber.App) {
 	api.Get("/posts/:id", Middlewares.Auth, Controllers.GetPostById)
 	api.Put("/posts/:id", Middlewares.Auth, Controllers.UpdatePost)
 	api.Delete("/posts/:id", Middlewares.Auth, Controllers.DeletePost)
+	api.Post("/posts/:id", Middlewares.Auth, Controllers.LikePost)
+	api.Post("/posts/:id/comment", Middlewares.Auth, Controllers.CommentToPost)
 }

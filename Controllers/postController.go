@@ -1,25 +1,310 @@
 package Controllers
 
 import (
+	"errors"
+	db "go-social-media-api/Config"
+	models "go-social-media-api/Models"
+	"go-social-media-api/Utils"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt"
+	"gorm.io/gorm"
 )
 
 func CreatePost(c *fiber.Ctx) error {
-	return nil
+	var post models.Posts
+	if err := c.BodyParser(&post); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid post data",
+		})
+	}
+
+	if post.Description == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Description is required",
+		})
+	}
+
+	file, err := c.FormFile("Image")
+
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Error uploading image",
+		})
+	}
+
+	imageBase64, err := Utils.UploadImage(file)
+	if err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Error uploading image",
+		})
+	}
+
+	post.Image = imageBase64
+
+	tokenString := c.Cookies("token")
+
+	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+
+	claims, _ := token.Claims.(jwt.MapClaims)
+	userId, err := strconv.Atoi(claims["userId"].(string))
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Error getting user",
+		})
+	}
+	post.UserId = uint(userId)
+	post.CreatedAt = time.Now()
+	post.UpdatedAt = time.Now()
+
+	db.DB.Create(&post)
+	return c.Status(http.StatusCreated).JSON(fiber.Map{
+		"success": true,
+		"message": "Post created successfully",
+		"data":    post,
+	})
 }
 
 func GetPosts(c *fiber.Ctx) error {
-	return nil
+	var posts []models.Posts
+	db.DB.Preload("Comments").Preload("LikedByUsers").Order("created_at desc").Find(&posts)
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Posts listed successfully",
+		"data":    posts,
+	})
+
 }
 
 func GetPostById(c *fiber.Ctx) error {
-	return nil
+	postId := c.Params("id")
+	if postId == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Post id is required",
+		})
+	}
+
+	var posts models.Posts
+	if err := db.DB.Where("id = ?", postId).First(&posts).Error; err != nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{
+			"success": false,
+			"message": "Post not found",
+		})
+	}
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Post listed successfully",
+		"data":    posts,
+	})
 }
 
 func UpdatePost(c *fiber.Ctx) error {
-	return nil
+	postId := c.Params("id")
+	if postId == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Post id is required",
+		})
+	}
+
+	var existingPost models.Posts
+	if err := db.DB.Where("id = ?", postId).First(&existingPost).Error; err != nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{
+			"success": false,
+			"message": "Post not found",
+		})
+	}
+
+	var updateData map[string]string
+	if err := c.BodyParser(&updateData); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid update data",
+		})
+	}
+
+	if description, ok := updateData["description"]; ok {
+		existingPost.Description = description
+	}
+
+	db.DB.Save(&existingPost)
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Post updated successfully",
+		"data":    existingPost,
+	})
 }
 
 func DeletePost(c *fiber.Ctx) error {
-	return nil
+	postId := c.Params("id")
+	if postId == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Post id is required",
+		})
+	}
+
+	tokenString := c.Cookies("token")
+
+	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+
+	claims, _ := token.Claims.(jwt.MapClaims)
+	userId, err := strconv.Atoi(claims["userId"].(string))
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Error getting user",
+		})
+	}
+	var post models.Posts
+	if err := db.DB.Where("id = ?", postId).Where("user_id = ?", userId).First(&post).Error; err != nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{
+			"success": false,
+			"message": "Post not found",
+		})
+	}
+
+	db.DB.Delete(&post)
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Post deleted successfully",
+	})
+}
+
+func LikePost(c *fiber.Ctx) error {
+	postId := c.Params("id")
+	if postId == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Post id is required",
+		})
+	}
+
+	var post models.Posts
+	if err := db.DB.Where("id = ?", postId).First(&post).Error; err != nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{
+			"success": false,
+			"message": "Post not found",
+		})
+	}
+
+	tokenString := c.Cookies("token")
+
+	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+
+	claims, _ := token.Claims.(jwt.MapClaims)
+	userId, err := strconv.Atoi(claims["userId"].(string))
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Error getting user",
+		})
+	}
+
+	var postLike models.PostLikes
+	err = db.DB.Where("post_id = ?", post.Id).Where("user_id = ?", userId).First(&postLike).Error
+	if err == nil {
+		post.LikesCount--
+		db.DB.Delete(&postLike)
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		postLike = models.PostLikes{
+			PostId: post.Id,
+			UserId: uint(userId),
+		}
+		db.DB.Create(&postLike)
+		post.LikesCount++
+	} else {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "An error occurred",
+		})
+	}
+
+	db.DB.Save(&post)
+
+	return c.Status(http.StatusOK).JSON(fiber.Map{
+		"success": true,
+		"message": "Post liked successfully",
+		"data":    post,
+	})
+}
+
+func CommentToPost(c *fiber.Ctx) error {
+	postId := c.Params("id")
+	if postId == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Post id is required",
+		})
+	}
+
+	var post models.Posts
+	if err := db.DB.Where("id = ?", postId).First(&post).Error; err != nil {
+		return c.Status(http.StatusNotFound).JSON(fiber.Map{
+			"success": false,
+			"message": "Post not found",
+		})
+	}
+
+	tokenString := c.Cookies("token")
+
+	token, _ := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+
+	claims, _ := token.Claims.(jwt.MapClaims)
+	userId, err := strconv.Atoi(claims["userId"].(string))
+	if err != nil {
+		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Error getting user",
+		})
+	}
+
+	var postComment models.PostCommets
+	if err := c.BodyParser(&postComment); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid comment data",
+		})
+	}
+
+	if postComment.Comment == "" {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Comment is required",
+		})
+	}
+
+	postComment.PostId = post.Id
+	postComment.UserId = uint(userId)
+	postComment.CreatedAt = time.Now()
+	postComment.UpdatedAt = time.Now()
+
+	db.DB.Create(&postComment)
+	return c.Status(http.StatusCreated).JSON(fiber.Map{
+		"success": true,
+		"message": "Comment created successfully",
+		"data":    postComment,
+	})
+
 }

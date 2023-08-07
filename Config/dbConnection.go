@@ -35,5 +35,7 @@ func Migration(conn *gorm.DB) {
 	conn.Debug().AutoMigrate(
 		&models.Users{},
 		&models.Posts{},
+		&models.PostLikes{},
+		&models.PostCommets{},
 	)
 }

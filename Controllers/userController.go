@@ -13,17 +13,25 @@ import (
 )
 
 func Register(c *fiber.Ctx) error {
-	var data map[string]string
-	err := c.BodyParser(&data)
-	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(
-			fiber.Map{
-				"success": false,
-				"message": "Invalid data",
-			})
+	var user models.Users
+	if err := c.BodyParser(&user); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid user data",
+		})
 	}
 
-	if data["username"] == "" {
+	var dbUser = models.Users{}
+	db.DB.Where("username = ?", user.Username).First(&dbUser)
+
+	if dbUser.Username == user.Username {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Username already exists",
+		})
+	}
+
+	if user.Username == "" {
 		return c.Status(http.StatusBadRequest).JSON(
 			fiber.Map{
 				"success": false,
@@ -31,7 +39,7 @@ func Register(c *fiber.Ctx) error {
 			})
 	}
 
-	if data["password"] == "" {
+	if user.Password == "" {
 		return c.Status(http.StatusBadRequest).JSON(
 			fiber.Map{
 				"success": false,
@@ -39,30 +47,27 @@ func Register(c *fiber.Ctx) error {
 			})
 	}
 
-	user := models.Users{
-		Username:  data["username"],
-		Password:  data["password"],
-		CreatedAt: time.Time{},
-		UpdatedAt: time.Time{},
+	userData := models.Users{
+		Username:  user.Username,
+		Password:  user.Password,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
-	db.DB.Create(&user)
-	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "message": "User created successfully", "data": user})
+	db.DB.Create(&userData)
+	return c.Status(http.StatusOK).JSON(fiber.Map{"success": true, "message": "User created successfully", "data": userData})
 }
 
 func Login(c *fiber.Ctx) error {
-	var data map[string]string
-
-	err := c.BodyParser(&data)
-	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(
-			fiber.Map{
-				"success": false,
-				"message": "Invalid data",
-			})
+	var user models.Users
+	if err := c.BodyParser(&user); err != nil {
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid user data",
+		})
 	}
 
-	if data["username"] == "" {
+	if user.Username == "" {
 		return c.Status(http.StatusBadRequest).JSON(
 			fiber.Map{
 				"success": false,
@@ -70,7 +75,7 @@ func Login(c *fiber.Ctx) error {
 			})
 	}
 
-	if data["password"] == "" {
+	if user.Password == "" {
 		return c.Status(http.StatusBadRequest).JSON(
 			fiber.Map{
 				"success": false,
@@ -79,8 +84,8 @@ func Login(c *fiber.Ctx) error {
 			})
 	}
 
-	var user = models.Users{}
-	db.DB.Where("username = ?", data["username"]).First(&user)
+	var dbUser = models.Users{}
+	db.DB.Where("username = ?", user.Username).First(&dbUser)
 
 	if user.Id == 0 {
 		return c.Status(http.StatusNotFound).JSON(
@@ -90,7 +95,7 @@ func Login(c *fiber.Ctx) error {
 			})
 	}
 
-	if user.Password != data["password"] {
+	if dbUser.Password != user.Password {
 		return c.Status(http.StatusBadRequest).JSON(
 			fiber.Map{
 				"success": false,
