@@ -67,7 +67,10 @@ func Login(c *fiber.Ctx) error {
 
 	alreadyLogin := c.Cookies("token")
 	if alreadyLogin != "" {
-		Logout(c)
+		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Already logged in",
+		})
 	}
 
 	var user models.Users

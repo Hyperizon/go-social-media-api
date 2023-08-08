@@ -1,24 +1,41 @@
 package Utils
 
 import (
-	"encoding/base64"
+	"fmt"
 	"io"
 	"mime/multipart"
+	"os"
+	"path/filepath"
+	"time"
 )
 
 func UploadImage(fileHeader *multipart.FileHeader) (string, error) {
-	file, err := fileHeader.Open()
+	fileExtension := filepath.Ext(fileHeader.Filename)
+	newFileName := fmt.Sprintf("%d%s", time.Now().Unix(), fileExtension)
 
+	uploadDir := "./Public/Images"
+	err := os.MkdirAll(uploadDir, os.ModePerm)
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
 
-	imageBytes, err := io.ReadAll(file)
+	filePath := filepath.Join(uploadDir, newFileName)
+	dst, err := os.Create(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer dst.Close()
+
+	src, err := fileHeader.Open()
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+
+	_, err = io.Copy(dst, src)
 	if err != nil {
 		return "", err
 	}
 
-	imageBase64 := base64.StdEncoding.EncodeToString(imageBytes)
-	return imageBase64, nil
+	return filePath, nil
 }
