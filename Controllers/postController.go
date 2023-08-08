@@ -232,6 +232,13 @@ func LikePost(c *fiber.Ctx) error {
 	if err == nil {
 		post.LikesCount--
 		db.DB.Delete(&postLike)
+
+		db.DB.Save(&post)
+
+		return c.Status(http.StatusOK).JSON(fiber.Map{
+			"success": true,
+			"message": "Post unliked successfully",
+		})
 	} else if errors.Is(err, gorm.ErrRecordNotFound) {
 		postLike = models.PostLikes{
 			PostId: post.Id,
@@ -239,20 +246,19 @@ func LikePost(c *fiber.Ctx) error {
 		}
 		db.DB.Create(&postLike)
 		post.LikesCount++
+
+		db.DB.Save(&post)
+
+		return c.Status(http.StatusOK).JSON(fiber.Map{
+			"success": true,
+			"message": "Post liked successfully",
+		})
 	} else {
 		return c.Status(http.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
 			"message": "An error occurred",
 		})
 	}
-
-	db.DB.Save(&post)
-
-	return c.Status(http.StatusOK).JSON(fiber.Map{
-		"success": true,
-		"message": "Post liked successfully",
-		"data":    postLike,
-	})
 }
 
 func CommentToPost(c *fiber.Ctx) error {
