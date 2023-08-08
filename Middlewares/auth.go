@@ -12,7 +12,10 @@ func Auth(c *fiber.Ctx) error {
 	tokenString := c.Cookies("token")
 
 	if tokenString == "" {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "Unauthorized. No token provided."})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Unauthorized. No token provided.",
+		})
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -21,13 +24,22 @@ func Auth(c *fiber.Ctx) error {
 
 	if err != nil {
 		if err == jwt.ErrSignatureInvalid {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "Invalid token signature"})
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"success": false,
+				"message": "Invalid token signature",
+			})
 		}
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "Invalid token"})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid token",
+		})
 	}
 
 	if !token.Valid {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"success": false, "message": "Token expired or invalid"})
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "Token expired or invalid",
+		})
 	}
 
 	return c.Next()

@@ -15,6 +15,8 @@ func Setup(app *fiber.App) {
 	api.Post("/users/login", Controllers.Login)
 	api.Get("/users/logout", Middlewares.Auth, Controllers.Logout)
 	api.Get("/users/:id/posts", Middlewares.Auth, Controllers.GetUserPosts)
+	api.Get("/users/:id/comments", Middlewares.Auth, Controllers.GetUserComments)
+	api.Get("/users/:id/likes", Middlewares.Auth, Controllers.GetUserLikes)
 
 	//Posts Routes
 	api.Post("/posts", Middlewares.Auth, Controllers.CreatePost)

@@ -2,14 +2,17 @@ package Controllers
 
 import (
 	"errors"
+	"fmt"
 	db "go-social-media-api/Config"
 	models "go-social-media-api/Models"
 	"go-social-media-api/Utils"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt"
 	"gorm.io/gorm"
@@ -24,31 +27,35 @@ func CreatePost(c *fiber.Ctx) error {
 		})
 	}
 
-	if post.Description == "" {
+	validate := validator.New()
+	if err := validate.Struct(post); err != nil {
+		var errMsgs []string
+		for _, err := range err.(validator.ValidationErrors) {
+			fieldName := strings.ToLower(err.Field())
+			errMsg := fmt.Sprintf("Field validation for '%s' failed on the '%s' tag", fieldName, err.Tag())
+			errMsgs = append(errMsgs, errMsg)
+		}
+
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
-			"message": "Description is required",
+			"message": "Validation error",
+			"errors":  errMsgs,
 		})
 	}
 
-	file, err := c.FormFile("Image")
+	file, _ := c.FormFile("Image")
 
-	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Error uploading image",
-		})
+	if file != nil {
+		imageBase64, err := Utils.UploadImage(file)
+		if err != nil {
+			return c.Status(http.StatusBadRequest).JSON(fiber.Map{
+				"success": false,
+				"message": "Error uploading image",
+			})
+		}
+
+		post.Image = imageBase64
 	}
-
-	imageBase64, err := Utils.UploadImage(file)
-	if err != nil {
-		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Error uploading image",
-		})
-	}
-
-	post.Image = imageBase64
 
 	tokenString := c.Cookies("token")
 
@@ -78,14 +85,13 @@ func CreatePost(c *fiber.Ctx) error {
 
 func GetPosts(c *fiber.Ctx) error {
 	var posts []models.Posts
-	db.DB.Preload("Comments").Preload("LikedByUsers").Order("created_at desc").Find(&posts)
+	db.DB.Preload("Comments").Preload("Likes").Order("created_at desc").Find(&posts)
 
 	return c.Status(http.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Posts listed successfully",
 		"data":    posts,
 	})
-
 }
 
 func GetPostById(c *fiber.Ctx) error {
@@ -244,11 +250,12 @@ func LikePost(c *fiber.Ctx) error {
 	return c.Status(http.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Post liked successfully",
-		"data":    post,
+		"data":    postLike,
 	})
 }
 
 func CommentToPost(c *fiber.Ctx) error {
+	fmt.Println("CommentToPost")
 	postId := c.Params("id")
 	if postId == "" {
 		return c.Status(http.StatusBadRequest).JSON(fiber.Map{
@@ -306,5 +313,4 @@ func CommentToPost(c *fiber.Ctx) error {
 		"message": "Comment created successfully",
 		"data":    postComment,
 	})
-
 }
