@@ -104,7 +104,7 @@ func GetPostById(c *fiber.Ctx) error {
 	}
 
 	var posts models.Posts
-	if err := db.DB.Where("id = ?", postId).First(&posts).Error; err != nil {
+	if err := db.DB.Preload("Comments").Preload("Likes").Where("id = ?", postId).First(&posts).Error; err != nil {
 		return c.Status(http.StatusNotFound).JSON(fiber.Map{
 			"success": false,
 			"message": "Post not found",
@@ -146,6 +146,7 @@ func UpdatePost(c *fiber.Ctx) error {
 	if description, ok := updateData["description"]; ok {
 		existingPost.Description = description
 	}
+	existingPost.UpdatedAt = time.Now()
 
 	db.DB.Save(&existingPost)
 
